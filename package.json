@@ -1,0 +1,34 @@
+{
+  "name": "dsh-desktop-upgrade",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DSH Desktop 升级入口插件：托盘菜单「升级 DSH…」+ 模型工具 dsh_upgrade，走官方版本服务与安装包通道",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "desktop",
+    "upgrade"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-tools": "*"
+  }
+}
