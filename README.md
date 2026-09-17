@@ -27,15 +27,24 @@
 
 ## 安装
 
+仓库已发布：<https://github.com/Liu-fu-gui/dsh-desktop-upgrade>（带 `dsh-plugin` topic，会被插件市场扫到）
+
 在 **DSH 终端**（设置 → 打开 DSH 终端）或任何 PATH 里有桌面版 `dsh` 的终端里执行：
 
 ```powershell
-# 开发态安装：源码目录直接 link 进 profile，改完代码重启即生效
+# 方式一：从 GitHub 安装（推荐）
+dsh plugin add github:Liu-fu-gui/dsh-desktop-upgrade
+
+# 方式二：本地开发态安装，改完代码重启即生效
 dsh plugin add link:D:\trea\tmp\dsh-desktop-upgrade
 
 # 装完确认
 dsh plugin list
 ```
+
+> npm 目前**没有**发布：本机 `npm whoami` 未登录，且默认源是只读镜像 `registry.npmmirror.com`。
+> 想走 npm 需要先 `npm login`（或配 `//registry.npmjs.org/:_authToken`），再用
+> `npm publish --registry https://registry.npmjs.org`；届时把 `package.json` 里的 `"private": true` 去掉即可。
 
 `dsh plugin` 会自动补上 `--profile desktop`（桌面版 shim 的行为），实际就是在该 profile 目录跑 pnpm、然后把依赖对平进 `dsh.profile.bundles`。
 
