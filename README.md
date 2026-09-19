@@ -4,14 +4,37 @@
 
 ## 为什么需要它
 
-- DSH Desktop 的 Web 设置页**没有**检查更新按钮：`client.js` 里 `api.checkForUpdates()` 和中文文案「检查更新」都定义了，但那个组件从来没渲染它。
+- DSH Desktop 的 Web 设置页**没有**检查更新按钮：`client.js` 里 `api.checkForUpdates()` 和中文文案「检查更新」都定义了，但那个组件从来没渲染它。本插件把这块补上了：设置 → **DSH 升级**。
 - 官方入口只藏在**系统托盘**「检查更新…」（后台也会每 6 小时自动查一次并发系统通知）。
 - 桌面版内核在 `<安装目录>\resources\app\node_modules\@deepseek-ai\dsh`，profile 里看到的 `~/.dsh/profiles/node_modules/@deepseek-ai/*` **全是指向它的 Junction**。所以任何"npm/pnpm 一键升级 dsh 本体"的第三方插件在这里都改不动内核，真正的升级只能靠官方安装包。
 
 本插件做的就是把官方那条链路补到可点的地方，并让模型也能调用：
 
-1. **托盘菜单**新增「升级 DSH…」：查官方版本服务 → 有新版时弹原生确认框（下载 / 稍后）→ 下载官方安装包并打开。用的是桌面版自己的 `desktopRuntime.updates` 适配器，和官方托盘项完全同一条路径。
-2. **模型工具 `dsh_upgrade`**：`status`（只报版本，不弹窗）/ `check`（只检查）/ `upgrade`（确认后下载安装包）。
+1. **Web 设置页新增「DSH 升级」分区**（`client.js`）：显示当前版本 / 官方最新 / 更新通道，一个「检查更新」按钮，一个「下载并安装」按钮（有新版且当前平台可下载时才出现）。点下载仍会弹官方原生确认框，确认后走同一条安装包通道。
+2. **托盘菜单**新增「升级 DSH…」：查官方版本服务 → 有新版时弹原生确认框（下载 / 稍后）→ 下载官方安装包并打开。用的是桌面版自己的 `desktopRuntime.updates` 适配器，和官方托盘项完全同一条路径。
+3. **模型工具 `dsh_upgrade`**：`status`（只报版本，不弹窗）/ `check`（只检查）/ `upgrade`（确认后下载安装包）。
+
+## 结构
+
+| 文件 | 角色 |
+|---|---|
+| `index.js` | Host 半侧：Cordis 插件本体（托盘项、`dsh_upgrade` 工具、桥接装配） |
+| `bridge.js` | Host 半侧纯逻辑：版本检查、升级流程、两条浏览器桥接路由 |
+| `client.js` | 浏览器半侧 bundle：`settings.section` 分区 UI |
+| `cordis.patch.yml` | bundle patch：往 profile 里插一行 `desktop-upgrade` |
+
+浏览器半侧按 dsh-client-modules 的约定声明：`package.json` 里 `dsh.client.platform = "web"`、`exports["./client"]`，bundle 用
+`window.__ModuleLoader__.load({ id: "dsh-desktop-upgrade", factory })` 的惰性 CJS 形状，由宿主在 `/plugins/dsh-desktop-upgrade/client.js` 提供。
+patch 行的 `name` 必须等于包名，扫描才能把两者对上。
+
+桥接路由（同源，仅接受 loopback / web runtime 的 trustedHosts，并拒绝浏览器跨站标记）：
+
+```
+GET  /dsh-desktop-upgrade/status   -> { ok, result: { status, currentVersion, latestVersion, channel, canDownload, manualUrl } }
+POST /dsh-desktop-upgrade/upgrade  -> { ok, result: { ...同上, accepted } }
+```
+
+`upgrade` 不会自己装东西：它调用桌面版的 `updates.confirmDownload()` 弹原生确认框，确认后才把官方安装包交给系统下载并打开。
 
 ## 它放在哪
 
@@ -52,12 +75,23 @@ dsh plugin list
 > `Copy-Item C:\Users\Administrator\.dsh\profiles\desktop\package.json C:\Users\Administrator\.dsh\profiles\desktop\package.json.bak-dsh-desktop-upgrade`
 > （以及 `pnpm-lock.yaml`）。目录里已有的 `package.json.bak-*` 说明这套流程以前用过。
 
-**装完必须重启 DSH Desktop**（profile 组合变化不会热生效）。重启会中断当前会话 —— 从托盘菜单退出再开，或设置里「重启」。
+**装完必须重启 DSH Desktop**（profile 组合变化和 client bundle 都不会热生效；托盘项与设置页分区都是启动时装配的）。重启会中断当前会话 —— 从托盘菜单退出再开，或设置里「重启」。
 
 ## 使用
 
-- 托盘图标右键 → **「升级 DSH…」**：有新版会弹确认框，确认后下载官方安装包并自动打开，跑完安装向导即完成升级。
-- 对话里让 agent 调 `dsh_upgrade`：例如"查一下 DSH 有没有新版本"（`status` / `check`），或"升级 DSH"（`upgrade`，同样会在屏幕上弹确认框，需要你点同意）。
+- **设置 → 「DSH 升级」**：进页面自动查一次官方版本；有新版时出现「下载并安装」，确认后下载官方安装包并自动打开，跑完安装向导即完成升级。
+- **托盘图标右键 → 「升级 DSH…」**：同上，入口在托盘。
+- **对话里让 agent 调 `dsh_upgrade`**：例如"查一下 DSH 有没有新版本"（`status` / `check`），或"升级 DSH"（`upgrade`，同样会在屏幕上弹确认框，需要你点同意）。
+
+## 开发与测试
+
+```powershell
+node --check index.js; node --check bridge.js; node --check client.js
+node --test test/bridge.test.mjs test/client.test.mjs
+```
+
+`test/bridge.test.mjs` 覆盖 SemVer 预发布规则、版本检查、升级流程（绝不绕过原生确认框）、以及桥接路由的 403 / 404 / 405 / 500 分支；
+`test/client.test.mjs` 用替身 `window.__ModuleLoader__` 装载 bundle，校验注册形状，并在桌面版自带的 React 18 上跑一次自带 hook dispatcher 的渲染冒烟。
 
 ## 卸载
 
@@ -69,13 +103,14 @@ dsh plugin remove dsh-desktop-upgrade
 
 ## 验证过的行为（本机 2026 实测）
 
-- `dsh-plugin-desktop@2.0.10` / stable 通道：官方最新 = `2.0.10` → `status` 返回 `up-to-date`。
+- `dsh-plugin-desktop@2.0.10` / stable 通道：官方最新 = `2.0.10` → 返回 `up-to-date`。
 - beta 通道：官方最新 = `2.0.10-beta.1`，按 SemVer 比较低于稳定版 `2.0.10` → 也判为 `up-to-date`（不会把你劝去降级）。
-- SemVer 比较与预发布规则有一组用例，见 `D:\trea\tmp\plugin-test\test.mjs`（含一次真实的版本服务调用）。
+- `dsh-plugin-desktop@2.0.11` 发布后：设置页显示「当前 2.0.10 / 官方最新 2.0.11」，点「下载并安装」弹官方原生确认框。
+- `node --test test/bridge.test.mjs test/client.test.mjs`：15 个用例全绿。
 
 ## 已知边界
 
-- 只在 **DSH Desktop 发行版**里可用：`desktopRuntime` 服务不存在时，插件不注册托盘项，`dsh_upgrade` 返回 `unavailable`。
-- 非打包模式（`isPackaged === false`）不注册托盘项。
+- 只在 **DSH Desktop 发行版**里可用：`desktopRuntime` 服务不存在时，插件不注册托盘项，工具与桥接都返回 `unavailable`。
+- 非打包模式（`isPackaged === false`）不注册托盘项；桥接路由仍在，但返回 `unavailable`。
 - 它**不**做应用内静默自更新，也**不**替换 `resources\app` 里的内核 —— 那属于改安装目录，会被下次官方更新覆盖。它只驱动官方安装包通道。
-- 该插件不改动、也不依赖任何内核文件；只用公开的 Cordis 服务（`tools`、`desktopRuntime`）与官方版本/下载端点。
+- 它不改动、也不依赖任何内核文件；只用公开的 Cordis 服务（`tools`、`desktopRuntime`、`webServer`）与官方版本 / 下载端点。

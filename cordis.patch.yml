@@ -1,6 +1,8 @@
-# dsh-desktop-upgrade bundle patch: one host row over the active profile.
-# The row name resolves from the profile's own node_modules, where
-# `dsh plugin add link:<this dir>` installed this package.
+# dsh-desktop-upgrade bundle patch: one row over the active profile.
+#
+# `name` must equal the package name: the profile resolves the Host half from
+# its own node_modules and the client-modules scan serves the same package at
+# /plugins/dsh-desktop-upgrade/client.js for the browser half (settings page).
 - insert:
     - id: desktop-upgrade
       name: dsh-desktop-upgrade
